@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Ponto Pro - Full</title>
+    <!-- Carregando as Bibliotecas Externas -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.autotable.min.js"></script>
+    
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #eef2f5; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        input, select { padding: 12px; margin: 5px 0; border: 1px solid #ccc; border-radius: 6px; }
+        button { padding: 12px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-blue { background: #007bff; color: white; }
+        .btn-green { background: #28a745; color: white; }
+        .btn-red { background: #dc3545; color: white; }
+        .btn-yellow { background: #ffc107; color: #212529; }
+        .card-ponto { background: #222; color: #0f0; padding: 20px; border-radius: 8px; font-family: monospace; fontSize: 2em; display: inline-block; margin-bottom: 20px; }
+        .aba-btn { margin-right: 10px; opacity: 0.6; }
+        .aba-ativa { opacity: 1; border-bottom: 3px solid #007bff; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; }
+        .justificativa-box { background: #fff3cd; padding: 15px; border-radius: 8px; border: 1px solid #ffeeba; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function App() {
+            // URL DO SEU BACKEND NA RENDER
+            const API_URL = "https://sistema-ponto-backend-a6l8.onrender.com";
+
+            const [user, setUser] = useState(null);
+            const [email, setEmail] = useState('');
+            const [senha, setSenha] = useState('');
+            const [aba, setAba] = useState('rh');
+            const [equipe, setEquipe] = useState([]);
+            const [espelho, setEspelho] = useState(null);
+            const [colabFocus, setColabFocus] = useState(null);
+            const [hora, setHora] = useState(new Date());
+
+            // Estados Cadastro
+            const [formCad, setFormCad] = useState({ nome: '', cpf: '', email: '', senha: '', carga: '8' });
+            // Estados Justificativa
+            const [formJust, setFormJust] = useState({ data: '', tipo: 'entrada', obs: '' });
+
+            useEffect(() => {
+                const timer = setInterval(() => setHora(new Date()), 1000);
+                return () => clearInterval(timer);
+            }, []);
+
+            const login = async (e) => {
+                e.preventDefault();
+                const res = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, senha })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    setUser(data);
+                    if (data.perfil === 'admin') buscarEquipe();
+                    else buscarEspelho(data.funcionario_id);
+                } else alert(data.erro);
+            };
+
+            const buscarEquipe = async () => {
+                const res = await fetch(`${API_URL}/funcionarios`);
+                const data = await res.json();
+                setEquipe(data);
+            };
+
+            const buscarEspelho = async (id) => {
+                const res = await fetch(`${API_URL}/espelho-ponto/${id}`);
+                const data = await res.json();
+                setEspelho(data);
+            };
+
+            const baterPonto = async (tipo) => {
+                await fetch(`${API_URL}/bater-ponto`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ funcionario_id: user.funcionario_id, tipo_batida: tipo })
+                });
+                buscarEspelho(user.funcionario_id);
+            };
+
+            const salvarJustificativa = async (e) => {
+                e.preventDefault();
+                const res = await fetch(`${API_URL}/justificar-ponto`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        funcionario_id: colabFocus.id,
+                        tipo_batida: formJust.tipo,
+                        data_hora_ajuste: new Date(formJust.data).toISOString(),
+                        observacao: formJust.obs
+                    })
+                });
+                if (res.ok) {
+                    alert("Ajuste Salvo!");
+                    buscarEspelho(colabFocus.id);
+                }
+            };
+
+            const gerarPDF = () => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                doc.text(`Relatorio: ${colabFocus.nome_completo}`, 14, 20);
+                
+                const rows = espelho.detalhes_turnos.map(t => [t.acao, t.horario, t.horas_neste_periodo || '-', t.observacao || '-']);
+                doc.autoTable({
+                    startY: 30,
+                    head: [['Acao', 'Horario', 'Horas', 'Obs']],
+                    body: rows
+                });
+                doc.save("ponto.pdf");
+            };
+
+            if (!user) return (
+                <div className="container" style={{maxWidth: '400px', marginTop: '100px'}}>
+                    <h2>Acesso ao Sistema</h2>
+                    <form onSubmit={login} style={{display: 'flex', flexDirection: 'column'}}>
+                        <input type="email" placeholder="E-mail" onChange={e => setEmail(e.target.value)} />
+                        <input type="password" placeholder="Senha" onChange={e => setSenha(e.target.value)} />
+                        <button className="btn-blue">Entrar</button>
+                    </form>
+                </div>
+            );
+
+            return (
+                <div className="container">
+                    <header style={{display: 'flex', justifyContent: 'space-between'}}>
+                        <h2>Olá, {user.nome}! {user.perfil === 'admin' ? '👑' : '🏢'}</h2>
+                        <button onClick={() => window.location.reload()}>Sair</button>
+                    </header>
+
+                    {user.perfil === 'admin' && (
+                        <nav style={{marginBottom: '20px'}}>
+                            <button className={`aba-btn ${aba === 'rh' ? 'aba-ativa' : ''}`} onClick={() => setAba('rh')}>Gestão RH</button>
+                            <button className={`aba-btn ${aba === 'ponto' ? 'aba-ativa' : ''}`} onClick={() => {setAba('ponto'); buscarEspelho(user.funcionario_id)}}>Meu Ponto</button>
+                        </nav>
+                    )}
+
+                    {(user.perfil === 'colaborador' || aba === 'ponto') && (
+                        <div>
+                            <div className="card-ponto">{hora.toLocaleTimeString()}</div>
+                            <div style={{display: 'flex', gap: '10px'}}>
+                                <button className="btn-blue" onClick={() => baterPonto('entrada')}>Entrada</button>
+                                <button className="btn-red" onClick={() => baterPonto('saida')}>Saída</button>
+                            </div>
+                            {espelho && <div style={{marginTop: '20px'}}>Total de Horas: {espelho.resumo.total_horas_trabalhadas}h</div>}
+                        </div>
+                    )}
+
+                    {user.perfil === 'admin' && aba === 'rh' && (
+                        <div style={{display: 'flex', gap: '20px'}}>
+                            <div style={{flex: 1}}>
+                                <h3>Cadastrar Equipe</h3>
+                                <input type="text" placeholder="Nome" style={{width: '90%'}} />
+                                <button className="btn-green" style={{width: '100%'}}>Salvar</button>
+                            </div>
+                            <div style={{flex: 2}}>
+                                <h3>Lista de Colaboradores</h3>
+                                {equipe.map(f => (
+                                    <div key={f.id} style={{padding: '10px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between'}}>
+                                        <span>{f.nome_completo}</span>
+                                        <button onClick={() => {setColabFocus(f); buscarEspelho(f.id)}}>Ver Ponto</button>
+                                    </div>
+                                ))}
+                                {colabFocus && espelho && (
+                                    <div className="justificativa-box">
+                                        <h4>Ajuste Manual para {colabFocus.nome_completo}</h4>
+                                        <form onSubmit={salvarJustificativa}>
+                                            <input type="datetime-local" onChange={e => setFormJust({...formJust, data: e.target.value})} required />
+                                            <input type="text" placeholder="Motivo" onChange={e => setFormJust({...formJust, obs: e.target.value})} required />
+                                            <button className="btn-yellow">Salvar Ajuste</button>
+                                        </form>
+                                        <button onClick={gerarPDF} style={{marginTop: '10px'}} className="btn-red">Gerar PDF</button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
