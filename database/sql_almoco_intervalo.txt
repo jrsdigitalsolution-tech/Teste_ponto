@@ -1,0 +1,117 @@
+SQL opcional para suportar batidas de almoço no Supabase/PostgreSQL
+======================================================================
+
+Use este arquivo somente se o seu backend/banco tiver uma restrição CHECK limitando o campo tipo_batida
+a apenas 'entrada' e 'saida'.
+
+IMPORTANTE:
+1. Confirme primeiro o nome real da tabela de batidas.
+2. Confirme o nome real da coluna do tipo da batida.
+3. Se sua tabela não tiver CHECK constraint, talvez nenhum SQL seja necessário.
+4. Este SQL não altera o frontend; ele apenas libera os novos valores no banco.
+5. A segurança e a regra definitiva de ordem das batidas devem continuar no backend.
+
+Tipos esperados pelo frontend atualizado:
+- entrada
+- inicio_almoco
+- volta_almoco
+- saida
+
+
+OPÇÃO A — Caso sua tabela se chame public.pontos e a coluna seja tipo_batida
+----------------------------------------------------------------------------
+
+begin;
+
+alter table public.pontos
+drop constraint if exists pontos_tipo_batida_check;
+
+alter table public.pontos
+add constraint pontos_tipo_batida_check
+check (
+    tipo_batida in (
+        'entrada',
+        'inicio_almoco',
+        'volta_almoco',
+        'saida'
+    )
+);
+
+commit;
+
+
+OPÇÃO B — Caso sua tabela se chame public.registros_ponto
+---------------------------------------------------------
+
+begin;
+
+alter table public.registros_ponto
+drop constraint if exists registros_ponto_tipo_batida_check;
+
+alter table public.registros_ponto
+add constraint registros_ponto_tipo_batida_check
+check (
+    tipo_batida in (
+        'entrada',
+        'inicio_almoco',
+        'volta_almoco',
+        'saida'
+    )
+);
+
+commit;
+
+
+OPÇÃO C — Caso sua tabela tenha outro nome
+------------------------------------------
+
+Substitua NOME_DA_TABELA e NOME_DA_CONSTRAINT pelos nomes reais:
+
+begin;
+
+alter table public.NOME_DA_TABELA
+drop constraint if exists NOME_DA_CONSTRAINT;
+
+alter table public.NOME_DA_TABELA
+add constraint NOME_DA_CONSTRAINT
+check (
+    tipo_batida in (
+        'entrada',
+        'inicio_almoco',
+        'volta_almoco',
+        'saida'
+    )
+);
+
+commit;
+
+
+Consulta útil para descobrir constraints relacionadas ao tipo_batida
+--------------------------------------------------------------------
+
+select
+    con.conname as constraint_name,
+    rel.relname as table_name,
+    pg_get_constraintdef(con.oid) as constraint_definition
+from pg_constraint con
+join pg_class rel on rel.oid = con.conrelid
+join pg_namespace nsp on nsp.oid = rel.relnamespace
+where nsp.nspname = 'public'
+  and pg_get_constraintdef(con.oid) ilike '%tipo_batida%';
+
+
+Recomendação de backend
+-----------------------
+
+O endpoint atual pode continuar recebendo o mesmo payload:
+
+{
+  "funcionario_id": 1,
+  "tipo_batida": "inicio_almoco"
+}
+
+Mas o backend deve validar a ordem esperada:
+
+entrada -> inicio_almoco -> volta_almoco -> saida
+
+Também recomendo aceitar exceções administrativas via /justificar-ponto para os quatro tipos.

@@ -1,0 +1,23 @@
+{
+    "name": "Vie Ponto ERP",
+    "short_name": "Vie Ponto",
+    "description": "ERP de ponto para gestão de jornada da Vie Medicina e Saúde.",
+    "start_url": "./index.html",
+    "scope": "./",
+    "display": "standalone",
+    "background_color": "#f7fbfa",
+    "theme_color": "#008b96",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "./assets/img/app-icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "./assets/img/app-icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
